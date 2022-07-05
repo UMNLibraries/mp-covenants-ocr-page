@@ -103,24 +103,12 @@ def lambda_handler(event, context):
     lines = [block for block in blocks if block['BlockType'] == 'LINE']
     words = [block for block in blocks if block['BlockType'] == 'WORD']
 
-    key = key.replace('test/milwaukee', 'raw/wi-milwaukee')  # Temp for testing
+    key = key.replace('test/milwaukee', 'raw/wi-milwaukee-county')  # Temp for testing
     key_parts = re.search('(?P<status>[a-z]+)/(?P<workflow>[A-z\-]+)/(?P<remainder>.+)\.(?P<extension>[a-z]+)', key).groupdict()
 
     textract_json_file = save_page_ocr_json(response, bucket, key_parts)
     page_txt_file = save_page_text(lines, bucket, key_parts)
     page_stats_file = save_doc_stats(lines, bucket, key_parts)
-
-    # print(page_info)
-
-    # print(blocks)
-    #
-    # block_types = '\n'.join([block['BlockType'] for block in blocks])
-    # print(block_types)
-    #
-    # for block in blocks:
-    #     print(block.keys())
-    # # block_keys = '\n'.join([','.join(block.keys) for block in blocks])
-    # # print(block_keys)
 
     return {
         "statusCode": 200,
