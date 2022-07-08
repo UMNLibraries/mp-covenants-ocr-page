@@ -83,10 +83,17 @@ def save_doc_stats(lines, bucket, key_parts):
 
 
 def lambda_handler(event, context):
-    #print("Received event: " + json.dumps(event, indent=2))
-    bucket = event['Records'][0]['s3']['bucket']['name']
-    key = urllib.parse.unquote_plus(
-        event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+    # print("Received event: " + json.dumps(event, indent=2))
+    if 'Records' in event:
+        # Get the object from a more standard put event
+        bucket = event['Records'][0]['s3']['bucket']['name']
+        key = urllib.parse.unquote_plus(
+            event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+    else:
+        # Get the object from an EventBridge event
+        bucket = event['detail']['bucket']['name']
+        key = event['detail']['object']['key']
+
     try:
         response = textract.detect_document_text(
             Document={'S3Object': {'Bucket': bucket, 'Name': key}})
@@ -112,11 +119,13 @@ def lambda_handler(event, context):
 
     return {
         "statusCode": 200,
-        "body": json.dumps({
+        "body": {
             "message": "hello world",
+            "bucket": bucket,
+            "orig": key,
             "json": textract_json_file,
             "txt": page_txt_file,
             "stats": page_stats_file
             # "location": ip.text.replace("\n", "")
-        }),
+        },
     }
