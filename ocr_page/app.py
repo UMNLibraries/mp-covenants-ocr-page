@@ -1,6 +1,6 @@
 import re
 import json
-# import ndjson
+import uuid
 import urllib.parse
 import boto3
 
@@ -59,18 +59,19 @@ def save_page_text(lines, bucket, key_parts):
     )
     return out_key
 
-def save_doc_stats(lines, bucket, key_parts):
+def save_doc_stats(lines, bucket, key_parts, public_uuid):
     num_lines = len(lines)
     num_chars = sum([len(line['Text']) for line in lines])
 
     stats = {
         'workflow': key_parts['workflow'],
         'remainder': key_parts['remainder'],
+        'public_uuid': public_uuid,
         'num_lines': num_lines,
         'num_chars': num_chars
     }
 
-    out_key = f"ocr/stats/{key_parts['workflow']}/{key_parts['remainder']}.json"
+    out_key = f"ocr/stats/{key_parts['workflow']}/{key_parts['remainder']}__{public_uuid}.json"
 
     s3.put_object(
         Body=json.dumps(stats),
@@ -95,8 +96,30 @@ def lambda_handler(event, context):
         key = event['detail']['object']['key']
 
     try:
+        print(bucket, key)
         response = textract.detect_document_text(
             Document={'S3Object': {'Bucket': bucket, 'Name': key}})
+
+        # response = client.start_document_text_detection(
+        #     DocumentLocation={
+        #         'S3Object': {
+        #             'Bucket': bucket,
+        #             'Name': key,
+        #             # 'Version': 'string'
+        #         }
+        #     },
+        #     ClientRequestToken='string',
+        #     JobTag='string',
+        #     NotificationChannel={
+        #         'SNSTopicArn': 'string',
+        #         'RoleArn': 'string'
+        #     },
+        #     OutputConfig={
+        #         'S3Bucket': 'string',
+        #         'S3Prefix': 'string'
+        #     },
+        #     KMSKeyId='string'
+        # )
 
     except Exception as e:
         print(e)
@@ -113,9 +136,11 @@ def lambda_handler(event, context):
     key = key.replace('test/milwaukee', 'raw/wi-milwaukee-county')  # Temp for testing
     key_parts = re.search('(?P<status>[a-z]+)/(?P<workflow>[A-z\-]+)/(?P<remainder>.+)\.(?P<extension>[a-z]+)', key).groupdict()
 
+    public_uuid = uuid.uuid4().hex
+
     textract_json_file = save_page_ocr_json(response, bucket, key_parts)
     page_txt_file = save_page_text(lines, bucket, key_parts)
-    page_stats_file = save_doc_stats(lines, bucket, key_parts)
+    page_stats_file = save_doc_stats(lines, bucket, key_parts, public_uuid)
 
     return {
         "statusCode": 200,
@@ -125,7 +150,8 @@ def lambda_handler(event, context):
             "orig": key,
             "json": textract_json_file,
             "txt": page_txt_file,
-            "stats": page_stats_file
+            "stats": page_stats_file,
+            "uuid": public_uuid
             # "location": ip.text.replace("\n", "")
         },
     }
