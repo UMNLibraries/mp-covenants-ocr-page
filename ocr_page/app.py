@@ -59,7 +59,7 @@ def save_page_text(lines, bucket, key_parts):
     )
     return out_key
 
-def save_doc_stats(lines, bucket, key_parts, public_uuid):
+def save_doc_stats(lines, bucket, key_parts, handwriting_pct, public_uuid):
     num_lines = len(lines)
     num_chars = sum([len(line['Text']) for line in lines])
 
@@ -68,7 +68,8 @@ def save_doc_stats(lines, bucket, key_parts, public_uuid):
         'remainder': key_parts['remainder'],
         'public_uuid': public_uuid,
         'num_lines': num_lines,
-        'num_chars': num_chars
+        'num_chars': num_chars,
+        'handwriting_pct': handwriting_pct
     }
 
     out_key = f"ocr/stats/{key_parts['workflow']}/{key_parts['remainder']}__{public_uuid}.json"
@@ -133,6 +134,12 @@ def lambda_handler(event, context):
     lines = [block for block in blocks if block['BlockType'] == 'LINE']
     words = [block for block in blocks if block['BlockType'] == 'WORD']
 
+    handwriting_words = [word for word in words if word["TextType"] == 'HANDWRITING']
+    if len(words) > 0:
+        handwriting_pct = round(len(handwriting_words) / len(words), 2)
+    else:
+        handwriting_pct = 0
+
     key = key.replace('test/milwaukee', 'raw/wi-milwaukee-county')  # Temp for testing
     key_parts = re.search('(?P<status>[a-z]+)/(?P<workflow>[A-z\-]+)/(?P<remainder>.+)\.(?P<extension>[a-z]+)', key).groupdict()
 
@@ -140,7 +147,7 @@ def lambda_handler(event, context):
 
     textract_json_file = save_page_ocr_json(response, bucket, key_parts)
     page_txt_file = save_page_text(lines, bucket, key_parts)
-    page_stats_file = save_doc_stats(lines, bucket, key_parts, public_uuid)
+    page_stats_file = save_doc_stats(lines, bucket, key_parts, handwriting_pct, public_uuid)
 
     return {
         "statusCode": 200,
@@ -151,7 +158,7 @@ def lambda_handler(event, context):
             "json": textract_json_file,
             "txt": page_txt_file,
             "stats": page_stats_file,
-            "uuid": public_uuid
-            # "location": ip.text.replace("\n", "")
+            "uuid": public_uuid,
+            "handwriting_pct": handwriting_pct
         },
     }
