@@ -91,6 +91,11 @@ def lambda_handler(event, context):
         bucket = event['Records'][0]['s3']['bucket']['name']
         key = urllib.parse.unquote_plus(
             event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+
+    elif 'key' in event:
+        # Probably coming from "map" state of step function, a result of mp-covenants-split-pages
+        bucket = event['bucket']
+        key = event['key']
     else:
         # Get the object from an EventBridge event
         bucket = event['detail']['bucket']['name']
