@@ -146,7 +146,7 @@ def lambda_handler(event, context):
         handwriting_pct = 0
 
     key = key.replace('test/milwaukee', 'raw/wi-milwaukee-county')  # Temp for testing
-    key_parts = re.search('(?P<status>[a-z]+)/(?P<workflow>[A-z\-]+)/(?P<remainder>.+)\.(?P<extension>[a-z]+)', key).groupdict()
+    key_parts = re.search('(?P<status>[a-z]+)/(?P<workflow>[A-z\-]+)/(?P<remainder>.+)\.(?P<extension>[A-z]+)', key).groupdict()
 
     public_uuid = uuid.uuid4().hex
 
