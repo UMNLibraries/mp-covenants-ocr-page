@@ -1,4 +1,5 @@
 import re
+import time
 import json
 import uuid
 import urllib.parse
@@ -100,6 +101,14 @@ def lambda_handler(event, context):
         # Get the object from an EventBridge event
         bucket = event['detail']['bucket']['name']
         key = event['detail']['object']['key']
+
+    # Pause n seconds * splitpage num if this is a splitpage to avoid throughput issues on textract
+    splitpage_match = re.search(r'_SPLITPAGE_(\d+)\.', key)
+    if splitpage_match:
+        splitpage_num = int(splitpage_match.group(1))
+        delay = 0.3 * splitpage_num
+        print(f"Splitpage {splitpage_num}: Sleeping for {delay} seconds...")
+        time.sleep(delay)
 
     try:
         print(bucket, key)
