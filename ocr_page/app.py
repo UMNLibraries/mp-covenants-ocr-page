@@ -86,7 +86,8 @@ def save_doc_stats(lines, bucket, key_parts, handwriting_pct, public_uuid):
 
 
 def lambda_handler(event, context):
-    # print("Received event: " + json.dumps(event, indent=2))
+    """This Lambda function receives a link to an s3 image key and runs Textract's detect_document_text method to create creates 3 new files: a Textract JSON file, a simple TXT file containing a text blob of all text found, and a stats json, which contains basic statistics like the amount of the page that is estimated to be handwritten, the number of lines, and number of words. Output of this function is sent to a parallel step that will use the OCRed text to search for racial covenant terms, and another that will create a web-friendly version of the image."""
+
     if 'Records' in event:
         # Get the object from a more standard put event
         bucket = event['Records'][0]['s3']['bucket']['name']
@@ -112,51 +113,33 @@ def lambda_handler(event, context):
 
     try:
         print(bucket, key)
+        # Actual OCR invocation. This is a synchronous operation.
         response = textract.detect_document_text(
             Document={'S3Object': {'Bucket': bucket, 'Name': key}})
-
-        # response = client.start_document_text_detection(
-        #     DocumentLocation={
-        #         'S3Object': {
-        #             'Bucket': bucket,
-        #             'Name': key,
-        #             # 'Version': 'string'
-        #         }
-        #     },
-        #     ClientRequestToken='string',
-        #     JobTag='string',
-        #     NotificationChannel={
-        #         'SNSTopicArn': 'string',
-        #         'RoleArn': 'string'
-        #     },
-        #     OutputConfig={
-        #         'S3Bucket': 'string',
-        #         'S3Prefix': 'string'
-        #     },
-        #     KMSKeyId='string'
-        # )
 
     except Exception as e:
         print(e)
         print('Error getting object {} from bucket {}. Make sure it exists and your bucket is in the same region as this function.'.format(key, bucket))
         raise e
 
-    #Get the text blocks
+    # Get the text blocks
     blocks=response['Blocks']
 
     page_info = [block for block in blocks if block['BlockType'] == 'PAGE']
     lines = [block for block in blocks if block['BlockType'] == 'LINE']
     words = [block for block in blocks if block['BlockType'] == 'WORD']
 
+    # How much of this page is handwritten?
     handwriting_words = [word for word in words if word["TextType"] == 'HANDWRITING']
     if len(words) > 0:
         handwriting_pct = round(len(handwriting_words) / len(words), 2)
     else:
         handwriting_pct = 0
 
-    key = key.replace('test/milwaukee', 'raw/wi-milwaukee-county')  # Temp for testing
+    # key = key.replace('test/milwaukee', 'raw/wi-milwaukee-county')  # Temp for testing
     key_parts = re.search('(?P<status>[a-z]+)/(?P<workflow>[A-z\-]+)/(?P<remainder>.+)\.(?P<extension>[A-z]+)', key).groupdict()
 
+    # Doing this here because the following steps all need to know this UUID, which is random, and is appended to web-friendly file name to deter scraping of public images.
     public_uuid = uuid.uuid4().hex
 
     textract_json_file = save_page_ocr_json(response, bucket, key_parts)
