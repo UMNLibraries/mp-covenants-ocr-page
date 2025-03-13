@@ -8,3 +8,13 @@ s3_prefix = "covenants-ocr-page"
 region = "XXXX"
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
+
+[otherenv]
+[otherenv.deploy]
+[otherenv.deploy.parameters]
+stack_name = "mp-ca-contracosta-prd-lambda-ocr-page"
+s3_bucket = "XXXX"
+s3_prefix = "lambda-ocr-page"
+region = "XXXX"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
