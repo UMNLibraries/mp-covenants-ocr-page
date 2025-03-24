@@ -1,73 +1,51 @@
 import json
+import boto3
+import toml
 
 import pytest
 
-from hello_world import app
+from ocr_page import app
+
+with open('samconfig.toml', 'r') as f:
+    config = toml.load(f)
+    s3_bucket = config['default']['deploy']['parameters']['s3_bucket']
+    s3_region = config['default']['deploy']['parameters']['region']
+
+s3 = boto3.client('s3')
 
 
-@pytest.fixture()
-def apigw_event():
-    """ Generates API GW Event"""
+def build_split_step_output(bucket, region, key, page_num=1):
+    """ Generates API GW Event based on output from split pages step Lambda"""
 
     return {
-        "body": '{ "test": "body"}',
-        "resource": "/{proxy+}",
-        "requestContext": {
-            "resourceId": "123456",
-            "apiId": "1234567890",
-            "resourcePath": "/{proxy+}",
-            "httpMethod": "POST",
-            "requestId": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef",
-            "accountId": "123456789012",
-            "identity": {
-                "apiKey": "",
-                "userArn": "",
-                "cognitoAuthenticationType": "",
-                "caller": "",
-                "userAgent": "Custom User Agent String",
-                "user": "",
-                "cognitoIdentityPoolId": "",
-                "cognitoIdentityId": "",
-                "cognitoAuthenticationProvider": "",
-                "sourceIp": "127.0.0.1",
-                "accountId": "",
+        "statusCode": 200,
+        "detail": {
+            "message": "hello world",
+            "bucket": {
+                "name": s3_bucket,
             },
-            "stage": "prod",
-        },
-        "queryStringParameters": {"foo": "bar"},
-        "headers": {
-            "Via": "1.1 08f323deadbeefa7af34d5feb414ce27.cloudfront.net (CloudFront)",
-            "Accept-Language": "en-US,en;q=0.8",
-            "CloudFront-Is-Desktop-Viewer": "true",
-            "CloudFront-Is-SmartTV-Viewer": "false",
-            "CloudFront-Is-Mobile-Viewer": "false",
-            "X-Forwarded-For": "127.0.0.1, 127.0.0.2",
-            "CloudFront-Viewer-Country": "US",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Upgrade-Insecure-Requests": "1",
-            "X-Forwarded-Port": "443",
-            "Host": "1234567890.execute-api.us-east-1.amazonaws.com",
-            "X-Forwarded-Proto": "https",
-            "X-Amz-Cf-Id": "aaaaaaaaaae3VYQb9jd-nvCd-de396Uhbp027Y2JvkCPNLmGJHqlaA==",
-            "CloudFront-Is-Tablet-Viewer": "false",
-            "Cache-Control": "max-age=0",
-            "User-Agent": "Custom User Agent String",
-            "CloudFront-Forwarded-Proto": "https",
-            "Accept-Encoding": "gzip, deflate, sdch",
-        },
-        "pathParameters": {"proxy": "/examplepath"},
-        "httpMethod": "POST",
-        "stageVariables": {"baz": "qux"},
-        "path": "/examplepath",
+            "object":  {
+                "key": key,
+                "page_num": page_num
+            }
+        }
     }
 
 
-def test_lambda_handler(apigw_event, mocker):
+@pytest.fixture()
+def no_ext_tif_event_1():
+    # TIF file with .001 extension, e.g. Forsyth or Contra Costa County
+    # return build_split_step_output(s3_bucket, s3_region, "raw/ca-contra-costa-county/Deeds/img1923a/19239045231500.001", 1)
+    return build_split_step_output(s3_bucket, s3_region, "raw/test-county/Deeds/19499142059800.001", 1)
 
-    ret = app.lambda_handler(apigw_event, "")
-    data = json.loads(ret["body"])
+
+def test_input_output_results(no_ext_tif_event_1):
+    ''' Does this run appropriately with output of mp-covenants-split-pages Lambda?'''
+    fixture = no_ext_tif_event_1
+
+    ret = app.lambda_handler(fixture, "")
+    data = ret["body"]
+    print(data)
 
     assert ret["statusCode"] == 200
-    assert "message" in ret["body"]
-    assert data["message"] == "hello world"
-    # assert "location" in data.dict_keys()
+    

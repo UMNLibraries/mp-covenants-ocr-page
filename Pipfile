@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 pytest = "*"
+boto3 = "*"
+toml = "*"
 
 [dev-packages]
 
