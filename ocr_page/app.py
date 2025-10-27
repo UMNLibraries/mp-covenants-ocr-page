@@ -88,6 +88,9 @@ def save_doc_stats(lines, bucket, key_parts, handwriting_pct, public_uuid):
 def lambda_handler(event, context):
     """This Lambda function receives a link to an s3 image key and runs Textract's detect_document_text method to create creates 3 new files: a Textract JSON file, a simple TXT file containing a text blob of all text found, and a stats json, which contains basic statistics like the amount of the page that is estimated to be handwritten, the number of lines, and number of words. Output of this function is sent to a parallel step that will use the OCRed text to search for racial covenant terms, and another that will create a web-friendly version of the image."""
 
+    in_bucket = None
+    out_bucket = None
+
     if 'Records' in event:
         # Get the object from a more standard put event
         bucket = event['Records'][0]['s3']['bucket']['name']
@@ -98,10 +101,18 @@ def lambda_handler(event, context):
         # Probably coming from "map" state of step function, a result of mp-covenants-split-pages
         bucket = event['bucket']
         key = event['key']
+        if 'in_bucket' in event:
+            in_bucket = event['in_bucket']
+        if 'out_bucket' in event:
+            out_bucket = event['out_bucket']
     else:
         # Get the object from an EventBridge event
         bucket = event['detail']['bucket']['name']
         key = event['detail']['object']['key']
+        if 'in_bucket' in event['detail']['object']:
+            in_bucket = event['detail']['object']['in_bucket']
+        if 'out_bucket' in event['detail']['object']:
+            out_bucket = event['detail']['object']['out_bucket']
 
     # Pause n seconds * splitpage num if this is a splitpage to avoid throughput issues on textract
     splitpage_match = re.search(r'_SPLITPAGE_(\d+)\.', key)
@@ -114,7 +125,11 @@ def lambda_handler(event, context):
     try:
         print(bucket, key)
         # Actual OCR invocation. This is a synchronous operation.
-        response = textract.detect_document_text(
+        if in_bucket:
+            response = textract.detect_document_text(
+            Document={'S3Object': {'Bucket': in_bucket, 'Name': key}})
+        else:
+            response = textract.detect_document_text(
             Document={'S3Object': {'Bucket': bucket, 'Name': key}})
 
     except Exception as e:
@@ -142,15 +157,20 @@ def lambda_handler(event, context):
     # Doing this here because the following steps all need to know this UUID, which is random, and is appended to web-friendly file name to deter scraping of public images.
     public_uuid = uuid.uuid4().hex
 
-    textract_json_file = save_page_ocr_json(response, bucket, key_parts)
-    page_txt_file = save_page_text(lines, bucket, key_parts)
-    page_stats_file = save_doc_stats(lines, bucket, key_parts, handwriting_pct, public_uuid)
+    if not out_bucket:
+        out_bucket = bucket
+
+    textract_json_file = save_page_ocr_json(response, out_bucket, key_parts)
+    page_txt_file = save_page_text(lines, out_bucket, key_parts)
+    page_stats_file = save_doc_stats(lines, out_bucket, key_parts, handwriting_pct, public_uuid)
 
     return {
         "statusCode": 200,
         "body": {
             "message": "hello world",
-            "bucket": bucket,
+            "bucket": bucket if not in_bucket else None,
+            "in_bucket": in_bucket,
+            "out_bucket": out_bucket,
             "orig": key,
             "json": textract_json_file,
             "txt": page_txt_file,
